@@ -1,4 +1,6 @@
 import streamlit as st
+import time
+
 from agents.content_agent import generate_challenge
 from config import (
     APP_NAME,
@@ -6,6 +8,13 @@ from config import (
     DIFFICULTIES,
     READING_TIMES,
     WRITING_TIMES,
+)
+
+
+st.set_page_config(
+    page_title=APP_NAME,
+    page_icon="🧠",
+    layout="centered",
 )
 
 
@@ -17,6 +26,7 @@ if "stage" not in st.session_state:
 if st.session_state.stage == "setup":
 
     st.title("🧠 Cognify AI")
+
     st.write(
         "Test how well you can read, remember, and recall information."
     )
@@ -52,7 +62,18 @@ if st.session_state.stage == "setup":
 
         if not topic.strip():
             st.warning("Please enter a topic.")
+
         else:
+            with st.spinner("Generating your challenge..."):
+
+                challenge = generate_challenge(
+                    topic=topic,
+                    word_limit=word_limit,
+                    difficulty=difficulty,
+                )
+
+            st.session_state.challenge = challenge
+
             st.session_state.topic = topic
             st.session_state.word_limit = word_limit
             st.session_state.difficulty = difficulty
@@ -68,21 +89,60 @@ elif st.session_state.stage == "reading":
 
     st.title("📖 Reading Phase")
 
+    challenge = st.session_state.challenge
+
+    # Initialize timer only once
+    if "reading_start_time" not in st.session_state:
+        st.session_state.reading_start_time = time.time()
+
+    elapsed_time = (
+        time.time()
+        - st.session_state.reading_start_time
+    )
+
+    total_time = st.session_state.reading_time * 60
+
+    remaining_time = max(
+        0,
+        total_time - elapsed_time,
+    )
+
+    remaining_seconds = int(remaining_time)
+
+    minutes = remaining_seconds // 60
+    seconds = remaining_seconds % 60
+
     st.info(
-        "The generated passage will appear here."
+        f"⏱️ Time Remaining: {minutes:02d}:{seconds:02d}"
+    )
+
+    # Timer expired
+    if remaining_time <= 0:
+
+        # Remove the reading timer
+        del st.session_state.reading_start_time
+
+        # Move to recall phase
+        st.session_state.stage = "recall"
+
+        st.rerun()
+
+    # Reading content
+    st.write(
+        f"Topic: **{challenge.topic}**"
     )
 
     st.write(
-        f"Topic: **{st.session_state.topic}**"
+        f"Difficulty: **{challenge.difficulty}**"
     )
 
-    st.write(
-        f"Difficulty: **{st.session_state.difficulty}**"
-    )
+    st.divider()
 
-    st.write(
-        f"Reading Time: **{st.session_state.reading_time} minutes**"
-    )
+    st.write(challenge.content)
+
+    # Refresh every second so timer updates
+    time.sleep(1)
+    st.rerun()
 
 
 elif st.session_state.stage == "recall":
@@ -93,6 +153,24 @@ elif st.session_state.stage == "recall":
         "The passage has disappeared. "
         "Write what you remember."
     )
+
+    recall = st.text_area(
+        "Your Recall",
+        placeholder="Write everything you remember...",
+        height=300,
+    )
+
+    if st.button("Submit Recall"):
+
+        if not recall.strip():
+            st.warning("Please write your recall before submitting.")
+
+        else:
+            st.session_state.user_recall = recall
+
+            st.session_state.stage = "evaluation"
+
+            st.rerun()
 
 
 elif st.session_state.stage == "evaluation":
@@ -111,16 +189,3 @@ elif st.session_state.stage == "result":
     st.write(
         "Your score and feedback will appear here."
     )
-
-
-
-
-st.set_page_config(
-    page_title=APP_NAME,
-    page_icon="🧠",
-    layout="centered",
-)
-
-
-
-
