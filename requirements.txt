@@ -10,4 +10,5 @@ numpy
 pydantic
 
 openai
+sentence_transformers
 
