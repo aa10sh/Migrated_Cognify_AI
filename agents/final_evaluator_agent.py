@@ -20,9 +20,9 @@ class FinalEvaluationResult(BaseModel):
 
 def evaluate_final_result(
     semantic_result: dict,
-    concept_result: dict,
+    concept_coverage_result: dict,
     faithfulness_result: dict,
-    language_result: dict,
+    language_coherence_result: dict,
 ) -> FinalEvaluationResult:
     """
     Combine the outputs of the independent evaluation agents
@@ -122,7 +122,7 @@ SEMANTIC EVALUATION
 CONCEPT COVERAGE EVALUATION
 ---------------------------------------
 
-{concept_result}
+{concept_coverage_result}
 
 ---------------------------------------
 FAITHFULNESS EVALUATION
@@ -134,7 +134,7 @@ FAITHFULNESS EVALUATION
 LANGUAGE & COHERENCE EVALUATION
 ---------------------------------------
 
-{language_result}
+{language_coherence_result}
 
 ---------------------------------------
 

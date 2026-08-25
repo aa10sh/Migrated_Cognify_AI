@@ -1,10 +1,9 @@
 import streamlit as st
 import time
 
-from streamlit_autorefresh import st_autorefresh
-
 from agents.content_agent import generate_challenge
-# from agents.evaluation_agent import evaluate_recall, EVALUATION_STAGES
+from graph.evaluation_graph import evaluation_graph
+
 from config import (
     APP_NAME,
     WORD_LIMITS,
@@ -12,7 +11,6 @@ from config import (
     READING_TIMES,
     WRITING_TIMES,
 )
-
 
 # --------------------------------------------------
 # PAGE CONFIGURATION
@@ -39,18 +37,75 @@ PHASES = [
 
 
 # --------------------------------------------------
-# EVALUATION TIMING
-# --------------------------------------------------
-
-SECONDS_PER_EVAL_STAGE = 0.7
-
-
-# --------------------------------------------------
 # SESSION STATE
 # --------------------------------------------------
 
 if "stage" not in st.session_state:
     st.session_state.stage = "setup"
+
+
+# --------------------------------------------------
+# PHASE TRANSITION HELPERS
+# (shared by fragments and normal button clicks)
+# --------------------------------------------------
+
+def _finish_reading():
+    """Called when the reading timer expires."""
+    st.session_state.pop("reading_start_time", None)
+    st.session_state.stage = "recall"
+    st.session_state.writing_start_time = time.time()
+    st.rerun(scope="app")
+
+
+def submit_recall():
+    """Called when the recall timer expires OR the user clicks Submit."""
+    recall_text = st.session_state.get("recall_text", "")
+    st.session_state["user_recall"] = recall_text
+    st.session_state.pop("writing_start_time", None)
+    st.session_state.stage = "evaluation"
+    st.rerun(scope="app")
+
+
+# --------------------------------------------------
+# TIMER FRAGMENTS
+#
+# These are the ONLY things that rerun every second.
+# They are intentionally isolated from the reading
+# passage and the recall text_area, so a tick can
+# never blow away in-progress widget state or force
+# the passage/textarea to be re-instantiated.
+# --------------------------------------------------
+
+@st.fragment(run_every=1)
+def reading_timer_fragment():
+    elapsed_time = time.time() - st.session_state.reading_start_time
+    total_time = st.session_state.reading_time * 60
+    remaining_time = max(0, total_time - elapsed_time)
+
+    remaining_seconds = int(remaining_time)
+    minutes = remaining_seconds // 60
+    seconds = remaining_seconds % 60
+
+    st.info(f"⏱️ Time Remaining: {minutes:02d}:{seconds:02d}")
+
+    if remaining_time <= 0:
+        _finish_reading()
+
+
+@st.fragment(run_every=1)
+def recall_timer_fragment():
+    elapsed_time = time.time() - st.session_state.writing_start_time
+    total_time = st.session_state.writing_time * 60
+    remaining_time = max(0, total_time - elapsed_time)
+
+    remaining_seconds = int(remaining_time)
+    minutes = remaining_seconds // 60
+    seconds = remaining_seconds % 60
+
+    st.info(f"⏱️ Time Remaining: {minutes:02d}:{seconds:02d}")
+
+    if remaining_time <= 0:
+        submit_recall()
 
 
 # --------------------------------------------------
@@ -84,41 +139,44 @@ with st.sidebar:
 
             st.write(f"○ {label}")
 
-    if "topic" in st.session_state and st.session_state.stage != "setup":
+    if (
+        "topic" in st.session_state
+        and st.session_state.stage != "setup"
+    ):
 
         st.divider()
 
         st.caption("Challenge Configuration")
 
-        st.write(f"**Topic:** {st.session_state.topic}")
+        st.write(
+            f"**Topic:** {st.session_state.topic}"
+        )
 
-        st.write(f"**Difficulty:** {st.session_state.difficulty}")
+        st.write(
+            f"**Difficulty:** {st.session_state.difficulty}"
+        )
 
-        st.write(f"**Word Limit:** {st.session_state.word_limit}")
+        st.write(
+            f"**Word Limit:** {st.session_state.word_limit}"
+        )
 
-        st.write(f"**Reading Time:** {st.session_state.reading_time} min")
+        st.write(
+            f"**Reading Time:** "
+            f"{st.session_state.reading_time} min"
+        )
 
-        st.write(f"**Writing Time:** {st.session_state.writing_time} min")
+        st.write(
+            f"**Writing Time:** "
+            f"{st.session_state.writing_time} min"
+        )
 
 
 # --------------------------------------------------
 # MAIN CONTENT AREA
 # --------------------------------------------------
-#
-# Every phase is drawn inside this single placeholder so a stage
-# switch always fully replaces whatever was here before.
-#
-# IMPORTANT: timers are driven by `st_autorefresh`, a client-side JS
-# timer that triggers a normal, well-spaced script rerun every tick —
-# NOT by calling `time.sleep()` followed by `st.rerun()` in a tight
-# loop. That blocking loop is what was causing the passage to still
-# be visible during Recall: firing `st.rerun()` recursively from
-# inside a `sleep()` loop can outrun Streamlit's own delta ordering,
-# so the frontend occasionally applies a stale "reading" delta after
-# the "recall" one. Autorefresh reruns the whole script on a clean
-# timer tick instead, so there's no loop for that race to happen in.
 
 content_area = st.empty()
+
 
 with content_area.container():
 
@@ -131,7 +189,8 @@ with content_area.container():
         st.title("🧠 Cognify AI")
 
         st.write(
-            "Test how well you can read, remember, and recall information."
+            "Test how well you can read, remember, "
+            "and recall information."
         )
 
         st.subheader("Configure Your Challenge")
@@ -169,7 +228,9 @@ with content_area.container():
 
             else:
 
-                with st.spinner("Generating your challenge..."):
+                with st.spinner(
+                    "Generating your challenge..."
+                ):
 
                     challenge = generate_challenge(
                         topic=topic,
@@ -186,25 +247,42 @@ with content_area.container():
                 st.session_state.writing_time = writing_time
 
                 # Reset phase-specific state
-                st.session_state.pop("reading_start_time", None)
-                st.session_state.pop("writing_start_time", None)
-                st.session_state.pop("recall_text", None)
-                st.session_state.pop("user_recall", None)
-                st.session_state.pop("eval_start_time", None)
-                st.session_state.pop("evaluation", None)
+                st.session_state.pop(
+                    "reading_start_time",
+                    None,
+                )
 
-                # Set the reading deadline now, so the Reading phase
-                # doesn't need its own "first run" initialization step.
-                st.session_state.reading_start_time = time.time()
+                st.session_state.pop(
+                    "writing_start_time",
+                    None,
+                )
 
-                # Move forward
+                st.session_state.pop(
+                    "recall_text",
+                    None,
+                )
+
+                st.session_state.pop(
+                    "user_recall",
+                    None,
+                )
+
+                st.session_state.pop(
+                    "evaluation_result",
+                    None,
+                )
+
+                # Start reading timer
+                st.session_state.reading_start_time = (
+                    time.time()
+                )
+
                 st.session_state.stage = "reading"
 
                 content_area.empty()
 
                 st.rerun()
 
-        st.stop()
 
     # ==================================================
     # READING PHASE
@@ -212,59 +290,36 @@ with content_area.container():
 
     elif st.session_state.stage == "reading":
 
-        # Ticks this script rerun once per second. No sleep, no
-        # recursive rerun — just a normal, isolated rerun per tick.
-        st_autorefresh(interval=1000, key="reading_timer_tick")
-
         st.title("📖 Reading Phase")
+
+        # Countdown lives in its own fragment: it is the
+        # ONLY thing that reruns every second. The passage
+        # below is rendered once per real phase run and is
+        # never touched by the 1s tick, so it can no longer
+        # flicker or disappear early.
+        reading_timer_fragment()
 
         challenge = st.session_state.challenge
 
-        elapsed_time = time.time() - st.session_state.reading_start_time
-        total_time = st.session_state.reading_time * 60
-        remaining_time = max(0, total_time - elapsed_time)
+        st.write(
+            f"Topic: **{challenge.topic}**"
+        )
 
-        remaining_seconds = int(remaining_time)
-        minutes = remaining_seconds // 60
-        seconds = remaining_seconds % 60
-
-        # ----------------------------------------------
-        # TIMER EXPIRED — checked BEFORE anything else is drawn,
-        # so the passage is never written into this run at all.
-        # ----------------------------------------------
-
-        if remaining_time <= 0:
-
-            st.session_state.pop("reading_start_time", None)
-            st.session_state.stage = "recall"
-            st.session_state.writing_start_time = time.time()
-
-            content_area.empty()
-
-            st.rerun()
-
-        # ----------------------------------------------
-        # READING CONTENT
-        # ----------------------------------------------
-
-        st.info(f"⏱️ Time Remaining: {minutes:02d}:{seconds:02d}")
-
-        st.write(f"Topic: **{challenge.topic}**")
-        st.write(f"Difficulty: **{challenge.difficulty}**")
+        st.write(
+            f"Difficulty: **{challenge.difficulty}**"
+        )
 
         st.divider()
 
-        # The passage is rendered ONLY here, and ONLY while
-        # st.session_state.stage == "reading".
+        # Passage is rendered ONLY in reading phase
         st.write(challenge.content)
+
 
     # ==================================================
     # RECALL PHASE
     # ==================================================
 
     elif st.session_state.stage == "recall":
-
-        st_autorefresh(interval=1000, key="recall_timer_tick")
 
         st.title("✍️ Recall Phase")
 
@@ -273,137 +328,206 @@ with content_area.container():
             "Write everything you remember."
         )
 
-        elapsed_time = time.time() - st.session_state.writing_start_time
-        total_time = st.session_state.writing_time * 60
-        remaining_time = max(0, total_time - elapsed_time)
+        # Countdown lives in its own fragment. It reruns
+        # every second in isolation and, on expiry, saves
+        # recall_text -> user_recall and transitions the
+        # phase. Because the text_area below sits OUTSIDE
+        # this fragment, it is never re-instantiated or
+        # resynced by the 1s tick, so typed text can no
+        # longer be clobbered mid-keystroke.
+        recall_timer_fragment()
 
-        remaining_seconds = int(remaining_time)
-        minutes = remaining_seconds // 60
-        seconds = remaining_seconds % 60
-
-        st.info(f"⏱️ Time Remaining: {minutes:02d}:{seconds:02d}")
-
-        # ----------------------------------------------
-        # RECALL INPUT
-        # ----------------------------------------------
-        # NOTE: `challenge.content` (the original passage) is never
-        # read anywhere in this branch.
-
-        recall = st.text_area(
+        st.text_area(
             "Your Recall",
             placeholder="Write everything you remember...",
             height=300,
             key="recall_text",
         )
 
-        # ----------------------------------------------
-        # TIMER EXPIRED
-        # ----------------------------------------------
-
-        if remaining_time <= 0:
-
-            st.session_state.user_recall = recall
-            st.session_state.pop("writing_start_time", None)
-            st.session_state.stage = "evaluation"
-            st.session_state.eval_start_time = time.time()
-
-            content_area.empty()
-
-            st.rerun()
+        # Explicit submit path: lets the user finish recall
+        # deterministically without waiting on the timer.
+        if st.button("Submit Recall"):
+            submit_recall()
 
     # ==================================================
     # EVALUATION PHASE
     # ==================================================
 
-    # elif st.session_state.stage == "evaluation":
+    elif st.session_state.stage == "evaluation":
 
-    #     st_autorefresh(interval=400, key="evaluation_timer_tick")
+        st.title("🔍 Evaluating Your Recall")
 
-    #     st.title("🔍 Evaluating Your Recall")
+        recall_text = st.session_state.get(
+            "user_recall",
+            "",
+        )
 
-    #     st.write("Analyzing how accurately you remembered the passage...")
+        if not recall_text.strip():
 
-    #     elapsed_time = time.time() - st.session_state.eval_start_time
-    #     current_stage_number = int(elapsed_time / SECONDS_PER_EVAL_STAGE)
+            st.error(
+                "No recall response was captured."
+            )
 
-    #     # ----------------------------------------------
-    #     # STAGE CHECKLIST (visual feedback only — no internals of
-    #     # the evaluation pipeline are exposed to the user)
-    #     # ----------------------------------------------
+            st.stop()
 
-    #     for index, label in enumerate(EVALUATION_STAGES):
+        st.info(
+            "Analyzing your recall across multiple dimensions..."
+        )
 
-    #         if index < current_stage_number:
-    #             st.write(f"✓ {label}")
-    #         elif index == current_stage_number:
-    #             st.write(f"🔵 **{label}**")
-    #         else:
-    #             st.write(f"○ {label}")
+        challenge = st.session_state.challenge
 
-    #     st.progress(min(current_stage_number / len(EVALUATION_STAGES), 1.0))
+        with st.spinner(
+            "Running evaluation agents..."
+        ):
 
-    #     # ----------------------------------------------
-    #     # EVALUATION COMPLETE
-    #     # ----------------------------------------------
+            result = evaluation_graph.invoke(
+                {
+                    "original_text": challenge.content,
+                    "key_concepts": challenge.key_concepts,
+                    "recall_text": recall_text,
+                }
+            )
 
-    #     if current_stage_number >= len(EVALUATION_STAGES):
+        st.session_state.evaluation_result = result
+        st.session_state.stage = "result"
 
-    #         challenge = st.session_state.challenge
-    #         recall_text = st.session_state.get("user_recall", "")
+        content_area.empty()
+        st.rerun()
 
-    #         evaluation = evaluate_recall(
-    #             passage=challenge.content,
-    #             recall_text=recall_text,
-    #         )
+    # ==================================================
+    # RESULT PHASE
+    # ==================================================
 
-    #         st.session_state.evaluation = evaluation
-    #         st.session_state.pop("eval_start_time", None)
-    #         st.session_state.stage = "result"
+    elif st.session_state.stage == "result":
 
-    #         content_area.empty()
+        st.title("🏆 Your Recall Result")
 
-    #         st.rerun()
+        result = (
+            st.session_state
+            .evaluation_result["final_result"]
+        )
 
-    # # ==================================================
-    # # RESULT PHASE
-    # # ==================================================
+        # ----------------------------------------------
+        # FINAL SCORE
+        # ----------------------------------------------
 
-    # elif st.session_state.stage == "result":
+        st.header(
+            f"{result['final_score']:.2f} / 100"
+        )
 
-    #     st.title("🏆 Your Recall Result")
+        st.progress(
+            result["final_score"] / 100
+        )
 
-    #     evaluation = st.session_state.evaluation
+        st.subheader(
+            f"Performance: "
+            f"{result['performance_level']}"
+        )
 
-    #     st.header(f"{evaluation.score} / 100")
-    #     st.progress(evaluation.score / 100)
-    #     st.write(evaluation.summary)
+        st.divider()
 
-    #     st.divider()
+        # ----------------------------------------------
+        # STRENGTHS
+        # ----------------------------------------------
 
-    #     st.subheader("What You Remembered Well")
-    #     for point in evaluation.remembered_well:
-    #         st.write(f"🟢 {point}")
+        st.subheader(
+            "What You Remembered Well"
+        )
 
-    #     st.subheader("What You Missed")
-    #     for point in evaluation.missed:
-    #         st.write(f"🔴 {point}")
+        for point in result["strengths"]:
 
-    #     st.subheader("AI Feedback")
-    #     st.info(evaluation.ai_feedback)
+            st.write(
+                f"🟢 {point}"
+            )
 
-    #     with st.expander("Evaluation Details"):
-    #         for label, value in evaluation.metrics.items():
-    #             st.write(f"**{label}:** {value}")
+        # ----------------------------------------------
+        # MISSED AREAS
+        # ----------------------------------------------
 
-    #     st.divider()
+        st.subheader(
+            "What You Missed"
+        )
 
-    #     if st.button("Start a New Challenge"):
+        for point in result["missed_areas"]:
 
-    #         for key in list(st.session_state.keys()):
-    #             st.session_state.pop(key, None)
+            st.write(
+                f"🔴 {point}"
+            )
 
-    #         st.session_state.stage = "setup"
+        # ----------------------------------------------
+        # FEEDBACK
+        # ----------------------------------------------
 
-    #         content_area.empty()
+        st.subheader("AI Feedback")
 
-    #         st.rerun()
+        st.info(
+            result["feedback"]
+        )
+
+        st.divider()
+
+        # ----------------------------------------------
+        # EVALUATION DETAILS
+        # ----------------------------------------------
+
+        with st.expander(
+            "Evaluation Details"
+        ):
+
+            evaluation = (
+                st.session_state
+                .evaluation_result
+            )
+
+            st.write(
+                "**Semantic Score:**",
+                evaluation[
+                    "semantic_result"
+                ]["score"],
+            )
+
+            st.write(
+                "**Coverage Score:**",
+                evaluation[
+                    "concept_coverage_result"
+                ]["score"],
+            )
+
+            st.write(
+                "**Faithfulness Score:**",
+                evaluation[
+                    "faithfulness_result"
+                ]["score"],
+            )
+
+            st.write(
+                "**Language Coherence Score:**",
+                evaluation[
+                    "language_coherence_result"
+                ]["overall_score"],
+            )
+
+        st.divider()
+
+        # ----------------------------------------------
+        # NEW CHALLENGE
+        # ----------------------------------------------
+
+        if st.button(
+            "Start a New Challenge"
+        ):
+
+            for key in list(
+                st.session_state.keys()
+            ):
+
+                st.session_state.pop(
+                    key,
+                    None,
+                )
+
+            st.session_state.stage = "setup"
+
+            content_area.empty()
+
+            st.rerun()

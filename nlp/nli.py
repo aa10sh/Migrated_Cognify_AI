@@ -28,14 +28,12 @@ def classify_nli(
 
     predicted_index = scores[0].argmax()
 
-    labels = [
-        "contradiction",
-        "entailment",
-        "neutral",
-    ]
+    label = _model.model.config.id2label[
+        predicted_index
+    ].lower()
 
     return {
-        "label": labels[predicted_index],
+        "label": label,
         "confidence": round(
             float(scores[0][predicted_index]),
             4,

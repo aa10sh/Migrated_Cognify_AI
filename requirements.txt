@@ -12,3 +12,6 @@ pydantic
 openai
 sentence_transformers
 
+grandalf
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu

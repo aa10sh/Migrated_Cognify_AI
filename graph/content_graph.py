@@ -7,7 +7,7 @@ from agents.content_validator_agent import (
     validate_challenge,
     is_valid,
 )
-
+MAX_ATTEMPTS = 3
 
 # ==================================================
 # STATE
@@ -23,6 +23,7 @@ class ContentState(TypedDict, total=False):
     validation_result: object
 
     attempts: int
+    error: str
 
 
 # ==================================================
@@ -62,9 +63,9 @@ def content_validator_node(
     """
 
     validation_result = validate_challenge(
-        challenge=state["challenge"],
-        word_limit=state["word_limit"],
-    )
+    challenge=state["challenge"],
+    target_word_count=state["word_limit"],
+)
 
     return {
         "validation_result": validation_result,
@@ -79,22 +80,29 @@ def validation_router(
     state: ContentState,
 ):
     """
-    Decide whether the generated challenge is valid.
+    Decide whether to accept the challenge or regenerate it.
 
-    Valid:
-        → END
-
-    Invalid:
-        → regenerate content
+    A maximum of MAX_ATTEMPTS generations is allowed.
     """
 
-    if is_valid(
-        state["validation_result"]
-    ):
+    if is_valid(state["validation_result"]):
         return "valid"
 
-    return "invalid"
+    if state.get("attempts", 0) < MAX_ATTEMPTS:
+        return "invalid"
 
+    return "failed"
+
+
+def content_generation_failed_node(
+    state: ContentState,
+):
+    return {
+        "error": (
+            f"Content generation failed after "
+            f"{MAX_ATTEMPTS} attempts."
+        )
+    }
 
 # ==================================================
 # BUILD GRAPH
@@ -115,6 +123,11 @@ def build_content_graph():
         content_validator_node,
     )
 
+    graph.add_node(
+    "generation_failed",
+    content_generation_failed_node,
+)
+
     # START → Generator
     graph.add_edge(
         START,
@@ -129,13 +142,20 @@ def build_content_graph():
 
     # Validator → Router
     graph.add_conditional_edges(
-        "validate",
-        validation_router,
-        {
-            "valid": END,
-            "invalid": "generate",
-        },
+    "validate",
+    validation_router,
+    {
+        "valid": END,
+        "invalid": "generate",
+        "failed": "generation_failed",
+    },
     )
+
+    graph.add_edge(
+    "generation_failed",
+    END,
+    )
+    
 
     return graph.compile()
 
