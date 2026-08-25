@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import time
 
 from agents.content_agent import generate_challenge
@@ -20,6 +21,23 @@ st.set_page_config(
     page_title=APP_NAME,
     page_icon="🧠",
     layout="centered",
+)
+
+# Streamlit dims/fades elements briefly every time a fragment reruns,
+# to indicate "updating" state. With run_every=1 on our timer
+# fragments, this fires every second during Reading/Recall and reads
+# as a distracting screen dim/blur flicker, even though it's purely
+# cosmetic and doesn't affect widget state or typing. Neutralize it.
+st.markdown(
+    """
+    <style>
+    [data-stale="true"] {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -57,6 +75,43 @@ def _finish_reading():
     st.rerun(scope="app")
 
 
+def _inject_recall_autosync():
+    """
+    st.text_area only commits its value to session_state on blur or
+    Ctrl+Enter - not on every keystroke. That means if the recall timer
+    expires (or Submit is clicked) while the user is still mid-keystroke
+    and hasn't blurred, whatever they typed since their last commit may
+    never have reached the server at all, and recall_text comes through
+    empty/stale even though the user visibly typed something.
+
+    This injects a tiny background script that, once a second, blurs
+    and immediately refocuses the recall textarea (only if it's
+    currently focused), preserving cursor position. That forces
+    Streamlit's normal blur-commit behavior to fire continuously, so
+    session_state["recall_text"] stays at most ~1s stale no matter
+    when the timer expires or Submit is pressed - without interrupting
+    the user's typing.
+    """
+    components.html(
+        """
+        <script>
+        setInterval(() => {
+            const doc = window.parent.document;
+            const active = doc.activeElement;
+            if (active && active.tagName === "TEXTAREA") {
+                const start = active.selectionStart;
+                const end = active.selectionEnd;
+                active.blur();
+                active.focus();
+                active.setSelectionRange(start, end);
+            }
+        }, 1000);
+        </script>
+        """,
+        height=0,
+    )
+
+
 def submit_recall():
     """Called when the recall timer expires OR the user clicks Submit."""
     recall_text = st.session_state.get("recall_text", "")
@@ -78,6 +133,19 @@ def submit_recall():
 
 @st.fragment(run_every=1)
 def reading_timer_fragment():
+    # Defensive guard against a known st.fragment(run_every=...) race:
+    # the browser-side timer that drives this fragment's auto-ticks is
+    # not perfectly synchronized with server-side phase transitions, so
+    # a stale tick can still arrive after we've already moved on to the
+    # next stage (and popped reading_start_time). Without this guard,
+    # that stale tick crashes with an AttributeError. With it, the
+    # stale tick is silently ignored instead.
+    if (
+        st.session_state.get("stage") != "reading"
+        or "reading_start_time" not in st.session_state
+    ):
+        return
+
     elapsed_time = time.time() - st.session_state.reading_start_time
     total_time = st.session_state.reading_time * 60
     remaining_time = max(0, total_time - elapsed_time)
@@ -94,6 +162,15 @@ def reading_timer_fragment():
 
 @st.fragment(run_every=1)
 def recall_timer_fragment():
+    # Same defensive guard as reading_timer_fragment: ignore stale
+    # auto-ticks that arrive after the phase has already moved on
+    # (e.g. right after "Submit Recall" pops writing_start_time).
+    if (
+        st.session_state.get("stage") != "recall"
+        or "writing_start_time" not in st.session_state
+    ):
+        return
+
     elapsed_time = time.time() - st.session_state.writing_start_time
     total_time = st.session_state.writing_time * 60
     remaining_time = max(0, total_time - elapsed_time)
@@ -343,6 +420,11 @@ with content_area.container():
             height=300,
             key="recall_text",
         )
+
+        # Keeps recall_text continuously synced to session_state even
+        # while the user is mid-keystroke - see _inject_recall_autosync
+        # docstring for why this is necessary.
+        _inject_recall_autosync()
 
         # Explicit submit path: lets the user finish recall
         # deterministically without waiting on the timer.
