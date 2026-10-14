@@ -1,249 +1,176 @@
-# Cognify AI
+# Cognify AI — React & LangGraph Edition
 
-Cognify AI is an AI-powered cognitive recall application that evaluates how well a user can remember and reproduce information after reading a passage for a limited amount of time.
+Cognify AI is an Agentic AI-powered cognitive recall and memory benchmark application. It evaluates how well a user can read, comprehend, retain, and accurately reproduce technical information under time constraints.
 
-Instead of relying on a single similarity score, Cognify evaluates recall across multiple dimensions:
+Instead of relying on a single naive score, Cognify evaluates recall across multiple independent dimensions using **LangGraph parallel multi-agent orchestration** and NLP techniques:
 
-- Semantic Similarity
-- Concept Coverage
-- Faithfulness
-- Language Coherence
+- **Semantic Understanding** (SentenceTransformer vector embeddings & cosine similarity)
+- **Concept Coverage** (Key concept matching & coverage percentage)
+- **Faithfulness & Accuracy** (Cross-Encoder NLI entailment and contradiction detection)
+- **Language & Coherence** (Grammar, clarity, coherence, and structural organization)
 
-The results are combined to generate a final score, performance level, and personalized feedback.
+The independent agent evaluations are synthesized into an overall performance score (0–100), performance level, strengths breakdown, missed concepts, and actionable AI feedback.
 
-## How It Works
+---
+
+## 🚀 Key Improvements & Architecture
+
+- **React Frontend**: Replaced Streamlit with a modern, responsive React 19 application powered by Vite, Tailwind CSS, Lucide icons, and canvas-confetti.
+- **FastAPI Backend**: High-performance RESTful API exposing challenge generation and LangGraph evaluation.
+- **Resilient Multi-Mode Engine**: Operates out-of-the-box using local Hugging Face NLP models (`all-MiniLM-L6-v2` and `nli-MiniLM2-L6-H768`), with dynamic OpenAI integration for passage generation and feedback synthesis.
+- **Unified Full-Stack Deployment**: A single command runs both the backend and serves the compiled React application at `http://localhost:8000`.
+
+---
+
+## 🧠 Core Workflow
 
 ```text
-Setup
+Setup Phase (Topic, Word Count, Difficulty, Reading & Recall Timers)
   ↓
-Content Generation
+Content Generation Agent + Validation (Pydantic & Target Word Bounds)
   ↓
-Content Validation
+Reading Phase (Passage view with synchronized countdown timer)
   ↓
-Reading Phase
+Passage Disappears Completely
   ↓
-Recall Phase
+Recall Phase (Timed writing space with live word count & stats)
   ↓
-Evaluation Graph
-  ├── Semantic Similarity
-  ├── Concept Coverage
-  ├── Faithfulness
-  └── Language Coherence
+LangGraph Evaluation Graph (Parallel Orchestration)
+  ├── 1. Semantic Similarity Node (all-MiniLM-L6-v2)
+  ├── 2. Concept Coverage Node (Threshold matching)
+  ├── 3. Faithfulness Node (cross-encoder/nli-MiniLM2-L6-H768)
+  └── 4. Language Coherence Node (Linguistic rubric)
           ↓
-    Final Evaluator
+  5. Final Evaluator Node (Weighted synthesis: 25% Sem, 35% Cov, 25% Faith, 15% Lang)
           ↓
-    Result & Feedback
+Result Phase (Score meter, performance badge, strengths, missed concepts, deep-dive inspector)
 ```
 
-### Content Generation
+---
 
-The user selects a topic, word limit, difficulty, reading time, and recall time.
-
-The Content Generation Graph then:
-
-1. Generates a reading passage.
-2. Extracts important key concepts.
-3. Validates the generated content.
-4. Regenerates the content if validation fails.
-
-### Reading and Recall
-
-The user reads the generated passage within the configured time limit.
-
-After the reading phase, the passage disappears and the user writes everything they remember during the recall phase.
-
-The recall can be submitted manually or automatically when the timer expires.
-
-## Evaluation System
-
-Cognify uses four independent evaluation agents.
-
-| Evaluation | Purpose |
-|---|---|
-| Semantic Similarity | Measures similarity in overall meaning |
-| Concept Coverage | Measures how many important concepts were remembered |
-| Faithfulness | Checks whether recalled claims are supported by the original passage |
-| Language Coherence | Evaluates grammar, clarity, coherence, and organization |
-
-The four agents are designed to run in parallel using LangGraph. Their results are then passed to a Final Evaluator that generates the overall result.
-
-### Semantic Similarity
-
-Uses sentence embeddings to compare the meaning of the original passage and the user's recall.
-
-Model:
+## 📁 Project Structure
 
 ```text
-sentence-transformers/all-MiniLM-L6-v2
-```
-
-### Concept Coverage
-
-Compares the important concepts extracted from the original passage with the user's recall and identifies covered and missed concepts.
-
-### Faithfulness
-
-Checks whether recalled statements are supported by the original passage.
-
-The system finds the most relevant source sentence and uses an NLI model to classify the relationship as:
-
-- Entailment
-- Neutral
-- Contradiction
-
-Model:
-
-```text
-cross-encoder/nli-MiniLM2-L6-H768
-```
-
-### Language Coherence
-
-Evaluates the quality of the written recall based on:
-
-- Grammar
-- Clarity
-- Coherence
-- Organization
-
-## Architecture
-
-Cognify uses two separate LangGraph workflows.
-
-### Content Generation Graph
-
-```text
-START
-  ↓
-Generate Challenge
-  ↓
-Validate Challenge
-  ↓
- ┌───────────────┐
- │               │
-Valid          Invalid
- │               │
- ↓               ↓
-END         Regenerate
-                │
-                └──→ Validate
-```
-
-### Evaluation Graph
-
-```text
-                 START
-                   │
-        ┌──────────┼──────────┐
-        ↓          ↓          ↓
-    Semantic    Coverage   Faithfulness
-        │          │          │
-        └──────────┼──────────┘
-                   ↓
-           Language Coherence
-                   ↓
-            Final Evaluator
-                   ↓
-                  END
-```
-
-## Technology Stack
-
-- Python
-- Streamlit
-- LangGraph
-- Pydantic
-- OpenAI API
-- Sentence Transformers
-- PyTorch
-- Hugging Face
-
-## Project Structure
-
-```text
-CognifyAI/
+ModifiedCognifyAI/
+├── frontend/                     # React Frontend (Vite + Tailwind CSS)
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Navbar.jsx        # Navigation & system status
+│   │   │   ├── Sidebar.jsx       # Phase stepper & parameters card
+│   │   │   ├── SetupPhase.jsx    # Challenge configuration form
+│   │   │   ├── ReadingPhase.jsx  # Countdown timer & passage display
+│   │   │   ├── RecallPhase.jsx   # Timed recall writing area
+│   │   │   ├── EvaluationPhase.jsx # LangGraph parallel execution visualizer
+│   │   │   ├── ResultPhase.jsx   # Multi-agent score dashboard & tabs
+│   │   │   └── SettingsModal.jsx # OpenAI API key & model settings
+│   │   ├── App.jsx               # Master React state controller
+│   │   ├── index.css             # Tailwind base styles
+│   │   └── main.jsx
+│   ├── package.json
+│   └── vite.config.js            # Vite config with backend proxy
 │
-├── agents/
-│   ├── content_agent.py
-│   ├── content_validator_agent.py
-│   ├── semantic_agent.py
-│   ├── coverage_agent.py
-│   ├── faithfulness_agent.py
-│   ├── language_coherence_agent.py
-│   └── final_evaluator_agent.py
+├── agents/                       # LangGraph Agent Nodes
+│   ├── content_agent.py          # Generates reading passage & key concepts
+│   ├── content_validator_agent.py# Validates passage word count & coherence
+│   ├── semantic_agent.py         # Evaluates semantic similarity
+│   ├── coverage_agent.py         # Evaluates key concept coverage
+│   ├── faithfulness_agent.py     # NLI entailment & contradiction check
+│   ├── language_coherence_agent.py # Writing quality & grammar rubric
+│   └── final_evaluator_agent.py  # Synthesizes final weighted score
 │
-├── graph/
-│   ├── content_graph.py
-│   └── evaluation_graph.py
+├── graph/                        # StateGraph Workflows
+│   ├── content_graph.py          # Generation-validation loop graph
+│   └── evaluation_graph.py       # Parallel multi-agent evaluation graph
 │
-├── nlp/
-│   ├── embeddings.py
-│   ├── coverage.py
-│   ├── nli.py
-│   └── faithfulness.py
+├── nlp/                          # Core NLP & ML Modules
+│   ├── embeddings.py             # SentenceTransformer embedding generator
+│   ├── similarity.py             # Cosine similarity calculations
+│   ├── coverage.py               # Key concept threshold matcher
+│   ├── nli.py                    # CrossEncoder NLI inference
+│   └── faithfulness.py           # Sentence extraction & support verification
 │
 ├── models/
-│   ├── challenge.py
-│   └── llm.py
+│   ├── challenge.py              # Challenge Pydantic schema
+│   └── llm.py                    # Resilient LLM client (OpenAI + offline fallback)
 │
-├── app.py
-├── config.py
-└── requirements.txt
+├── server.py                     # FastAPI REST API & static file server
+├── run.py                        # Unified launch script
+├── run.bat                       # One-click Windows launcher
+├── config.py                     # Challenge constants & word limits
+└── requirements.txt              # Python dependencies
 ```
 
-## Installation
+---
 
-Clone the repository:
+## ⚡ Quick Start
 
-```bash
-git clone <repository-url>
-cd CognifyAI
-```
+### 1. Prerequisites
 
-Create a virtual environment:
+- Python 3.11+
+- Node.js v18+ & npm
 
-```bash
-python -m venv cognify
-```
+### 2. Environment Setup
 
-Activate it on Windows:
+Create and activate a virtual environment:
 
 ```powershell
-.\cognify\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```bash
+py -3.11 -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-Create a `.env` file:
+*(Optional)* Configure your OpenAI API key in `.env` (or configure it directly in the React UI via the Settings modal):
 
-```text
-OPENAI_API_KEY=your_api_key
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini
 ```
 
-Run the application:
+### 3. Launch the Application
 
-```bash
-streamlit run app.py
+Run the unified launch script:
+
+```powershell
+python run.py
 ```
 
-## Future Plans
+Or double-click `run.bat` in Windows Explorer.
 
-- Backend API using FastAPI
-- Database integration
-- User accounts and progress tracking
-- Adaptive difficulty based on previous performance
-- Asynchronous and distributed evaluation
-- Dedicated ML inference services
-- Docker and AWS deployment
-- CI/CD pipeline
-- Logging and monitoring
+The application will automatically start the FastAPI + LangGraph server and open the React application in your browser at:
+👉 **`http://localhost:8000`**
 
-The long-term goal is to evolve Cognify into a personalized cognitive training platform that adapts challenges based on the user's previous performance.
+---
 
-## Author
+## 🛠️ Development Mode
+
+To run frontend and backend with hot module reloading:
+
+1. **Start the FastAPI backend:**
+   ```powershell
+   python -m uvicorn server:app --reload --port 8000
+   ```
+
+2. **Start the Vite React dev server:**
+   ```powershell
+   cd frontend
+   npm run dev
+   ```
+   Open `http://localhost:3000` (API requests are automatically proxied to port 8000).
+
+---
+
+## 🔌 API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check endpoint |
+| `GET` | `/api/config` | Retrieves challenge options and AI status |
+| `POST` | `/api/settings` | Updates OpenAI API key & model settings |
+| `POST` | `/api/challenge/generate` | Generates a validated reading challenge |
+| `POST` | `/api/challenge/evaluate` | Executes the LangGraph parallel evaluation |
+
+---
+
+## 👤 Author
 
 **Adarsh Singh**

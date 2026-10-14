@@ -1,4 +1,6 @@
-
+# Web & API Framework
+fastapi>=0.115.0
+uvicorn>=0.30.0
 streamlit
 python-dotenv
 
@@ -12,7 +14,8 @@ pydantic>=2.7.4,<3
 # Embeddings and NLP evaluation
 sentence-transformers==6.1.0
 scikit-learn
-numpy==1.26.4
+numpy>=1.26.4
+torch>=2.2.0
 
 # Graph visualization utilities
 grandalf

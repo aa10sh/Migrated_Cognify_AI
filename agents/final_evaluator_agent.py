@@ -32,6 +32,22 @@ def evaluate_final_result(
     evaluation itself. It interprets the results produced by
     the independent evaluators.
     """
+    # Edge case: user left the typing space blank or submitted no text
+    if (
+        float(semantic_result.get("score", 0)) == 0.0
+        and float(concept_coverage_result.get("score", 0)) == 0.0
+        and float(language_coherence_result.get("overall_score", 0)) == 0.0
+    ):
+        missed = concept_coverage_result.get("missed_concepts") or [
+            "All concepts from the passage were missed because no response was provided."
+        ]
+        return FinalEvaluationResult(
+            final_score=0.0,
+            performance_level="Poor",
+            strengths=[],
+            missed_areas=missed,
+            feedback="You did not type anything. No recall response was captured to evaluate. Please write what you remember from the passage to receive an evaluation score.",
+        )
 
     prompt = f"""
 You are the Final Evaluation Agent for Cognify AI.

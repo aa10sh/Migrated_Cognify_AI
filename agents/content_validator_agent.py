@@ -42,9 +42,10 @@ def validate_challenge(
 
     actual_word_count = count_words(challenge.content)
 
-    # Allow a 10% tolerance around the requested word count.
-    minimum_words = int(target_word_count * 0.90)
-    maximum_words = int(target_word_count * 1.10)
+    # Allow a reasonable tolerance around the requested word count for LLM generation
+    tolerance = max(12, int(target_word_count * 0.20))
+    minimum_words = max(15, target_word_count - tolerance)
+    maximum_words = target_word_count + tolerance
 
     word_count_valid = (
         minimum_words <= actual_word_count <= maximum_words
