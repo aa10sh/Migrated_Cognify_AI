@@ -1,17 +1,18 @@
+
 streamlit
 python-dotenv
 
-langchain
-langgraph
+# Graph orchestration
+langgraph==1.2.15
 
-sentence-transformers
+# LLM API and structured outputs
+openai==3.31.0
+pydantic>=2.7.4,<3
+
+# Embeddings and NLP evaluation
+sentence-transformers==6.1.0
 scikit-learn
-numpy
-pydantic
+numpy==1.26.4
 
-openai
-sentence_transformers
-
+# Graph visualization utilities
 grandalf
-torch==2.5.1+cpu
-torchvision==0.20.1+cpu
